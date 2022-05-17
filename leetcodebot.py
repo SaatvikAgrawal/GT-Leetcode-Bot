@@ -12,38 +12,39 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PRODUCTION = os.getenv("PRODUCTION")
 CONNECTION_STRING = os.getenv("CONNECTION_STRING")
+CLIENT = MongoClient(CONNECTION_STRING)
 
 bot = None
 if int(PRODUCTION) == 1:
-    intents = discord.Intents(messages=True, message_content=True, guilds=True, guild_messages=True)
+    intents = discord.Intents(
+        messages=True, message_content=True, guilds=True, guild_messages=True
+    )
     bot = commands.Bot(command_prefix="!", intents=intents)
 else:
     bot = commands.Bot(command_prefix="!")
 
 
 def get_database():
-    # Create a connection using MongoClient
-    client = MongoClient(CONNECTION_STRING)
-
-    # Create the database
-    return client['users']
+    return CLIENT["users"]
 
 
 def call_leetcode_api(username):
-    api_url = 'https://leetcode.com/graphql?query='
+    api_url = "https://leetcode.com/graphql?query="
     query = """
-        { matchedUser(username: """ + '"' + username + '"' + """) {
-        username
-        submitStats: submitStatsGlobal {
-        acSubmissionNum {
-        difficulty
-        count
-        submissions
-        }
-        }
-        }
-        }
-    """
+        {{ 
+            matchedUser(username: "{0}") {{
+                username
+                submitStats: submitStatsGlobal {{
+                    acSubmissionNum {{
+                        difficulty
+                        count
+                        submissions
+                    }}
+                }}
+            }}
+        }}
+    """.format(username)
+
     return dict(requests.get(api_url + query).json())
 
 
@@ -60,10 +61,10 @@ def get_scores():
 
         response = call_leetcode_api(user["leetcode_username"])
 
-        user_submissions_data = response['data']['matchedUser']['submitStats']['acSubmissionNum']
-        easy = user_submissions_data[1]['count']
-        medium = user_submissions_data[2]['count']
-        hard = user_submissions_data[3]['count']
+        user_submissions_data = response["data"]["matchedUser"]["submitStats"]["acSubmissionNum"]
+        easy = user_submissions_data[1]["count"]
+        medium = user_submissions_data[2]["count"]
+        hard = user_submissions_data[3]["count"]
 
         score = easy + (3 * medium) + (5 * hard)
 
@@ -104,17 +105,14 @@ async def link(ctx, account_name):
 
     # If account is valid and not in database, add to database
     else:
-        new_user = {
-            "leetcode_username": account_name,
-            "discord_id": ctx.author.id
-        }
+        new_user = {"leetcode_username": account_name, "discord_id": ctx.author.id}
         database["users"].insert_one(new_user)
         await ctx.send(f"Set Leetcode account for {str(ctx.author)} to {account_name}")
 
 
 @bot.event
 async def on_ready():
-    print('We have logged in as {0.user}'.format(bot))
+    print("We have logged in as {0.user}".format(bot))
 
 
 @bot.event
