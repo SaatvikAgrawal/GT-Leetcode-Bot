@@ -13,8 +13,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 PRODUCTION = os.getenv("PRODUCTION")
 CONNECTION_STRING = os.getenv("CONNECTION_STRING")
 
-print(CONNECTION_STRING)
-
 bot = None
 if int(PRODUCTION) == 1:
     intents = discord.Intents(messages=True, message_content=True, guilds=True, guild_messages=True)
@@ -49,47 +47,34 @@ def call_leetcode_api(username):
     return dict(requests.get(api_url + query).json())
 
 
-# Method to update all of the scores.
-def update(accounts_reference=None):
-    # Key: leetcode username | Value: discord id
-    accounts = {}
+# Method to get scores.
+def get_scores():
+    # Key: discord id, Value: score
+    score_totals = {}
 
     database = get_database()
     users_collection = database["users"].find()
     users_list = list(users_collection)
+
     for user in users_list:
-        accounts[user["leetcode_username"]] = user["discord_id"]
 
-    # Pass reference of accounts (a dictionary from leetcode username to discord user id) to create a copy
-    if accounts_reference is not None:
-        for accountKeys in accounts.keys():
-            accounts_reference[accountKeys] = accounts[accountKeys]
+        response = call_leetcode_api(user["leetcode_username"])
 
-    account_names = accounts.keys()
-    # maps leetcode username to score
-    score_totals = {}
-    for account in account_names:
+        user_submissions_data = response['data']['matchedUser']['submitStats']['acSubmissionNum']
+        easy = user_submissions_data[1]['count']
+        medium = user_submissions_data[2]['count']
+        hard = user_submissions_data[3]['count']
 
-        response = call_leetcode_api(account)
-        user_data_parsed = response['data']['matchedUser']['submitStats']['acSubmissionNum']
-        easy = user_data_parsed[1]['count']
-        medium = user_data_parsed[2]['count']
-        hard = user_data_parsed[3]['count']
+        score = easy + (3 * medium) + (5 * hard)
 
-        total = easy + (3 * medium) + (5 * hard)
-        score_totals[account] = total
-        print(score_totals)
+        score_totals[user["discord_id"]] = score
 
     return score_totals
 
 
 @bot.command()
 async def top(ctx):
-    # Key: leetcode username | Value: discord id
-    accounts = {}
-
-    # Pass a reference to accounts
-    score_totals = update(accounts)
+    score_totals = get_scores()
 
     position_no = 1
     leaderboard = ""
@@ -98,8 +83,7 @@ async def top(ctx):
     sorted_score_totals = sorted(score_totals.items(), reverse=True, key=operator.itemgetter(1))
 
     for score in sorted_score_totals:
-        leaderboard += (str(position_no) + ". " + str(await bot.fetch_user(accounts[str(score[0])])) + ": " + str(
-            score[1]) + " " + "\n")
+        leaderboard += f"{str(position_no)}. {str(await bot.fetch_user(score[0]))}: {str(score[1])} \n"
         position_no += 1
     await ctx.send(leaderboard)
 
