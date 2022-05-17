@@ -1,15 +1,31 @@
-import discord
-from discord.ext import commands
-import requests
 import operator
-import random
-import pymongo
+import os
+
+import discord
+import requests
+from discord.ext import commands
 from pymongo import MongoClient
+from dotenv import load_dotenv
+
+# This is added so that many files can reuse the function get_database()
+load_dotenv()
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+PRODUCTION = os.getenv("PRODUCTION")
+
+bot = None
+if int(PRODUCTION) == 1:
+    intents = discord.Intents(messages=True, message_content=True, guilds=True, guild_messages=True)
+    bot = commands.Bot(command_prefix="!", intents=intents)
+else:
+    bot = commands.Bot(command_prefix="!")
+
+print(BOT_TOKEN)
+
 
 def get_database():
-
     # Provide the MongoDB atlas url to connect Python to MongoDB using PyMongo
-    CONNECTION_STRING = "MONGODB_CONNECTION_STRING"
+    CONNECTION_STRING = os.getenv("CONNECTION_STRING")
 
     # Create a connection using MongoClient.
     client = MongoClient(CONNECTION_STRING)
@@ -17,15 +33,10 @@ def get_database():
     # Create the database
     return client['users']
 
-# This is added so that many files can reuse the function get_database()
-if __name__ == "__main__":
-
-    # Get the database
-    database = get_database()
 
 # Method to update all of the scores.
 def update(accountsReference=None):
-    #file = open("accounts.csv", "r")
+    # file = open("accounts.csv", "r")
 
     # Key: leetcode username | Value: discord id
     accounts = {}
@@ -79,8 +90,6 @@ def update(accountsReference=None):
 
     return scoreTotals
 
-intents = discord.Intents(messages=True, message_content=True, guilds=True, guild_messages=True)
-bot = commands.Bot(command_prefix = "!", intents = intents)
 
 @bot.command()
 async def top(ctx):
@@ -88,22 +97,24 @@ async def top(ctx):
     # Pass a reference to accounts
     scoreTotals = update(accounts)
 
-    count = 1 # Leaderboard position
+    count = 1  # Leaderboard position
     leaderboard = ""
     # Sort data by the total score values, from greatest to least
-    sortedScoreTotals = sorted(scoreTotals.items(), reverse = True, key=operator.itemgetter(1))
+    sortedScoreTotals = sorted(scoreTotals.items(), reverse=True, key=operator.itemgetter(1))
     for element in sortedScoreTotals:
-        leaderboard += (str(count) + ". " + str(await bot.fetch_user(accounts[str(element[0])])) + ": " + str(element[1]) + " " + "\n")
+        leaderboard += (str(count) + ". " + str(await bot.fetch_user(accounts[str(element[0])])) + ": " + str(
+            element[1]) + " " + "\n")
         count += 1
     await ctx.send(leaderboard)
+
 
 @bot.command()
 async def link(ctx, newAccount):
     newAccount = str(newAccount)
     database = get_database()
-    #print("Current user in database: " + list(database["users"].find({"discord_id" : ctx.author.id})))
+    # print("Current user in database: " + list(database["users"].find({"discord_id" : ctx.author.id})))
     # If the user exists in the database, then they have already linked an account
-    if list(database["users"].find({"discord_id" : ctx.author.id})) != []:
+    if list(database["users"].find({"discord_id": ctx.author.id})) != []:
         await ctx.send("You already linked an account")
     # If the status is "error," then the account does not exist (or some other issue has occurred)
     elif dict(requests.get("https://leetcode-stats-api.herokuapp.com/" + newAccount).json())["status"] == "error":
@@ -111,15 +122,17 @@ async def link(ctx, newAccount):
     # If the status is not error, then the account has been successfully found in the database and is added to the file
     else:
         newUser = {
-            "leetcode_username" : newAccount,
-            "discord_id" : ctx.author.id
+            "leetcode_username": newAccount,
+            "discord_id": ctx.author.id
         }
         database["users"].insert_one(newUser)
         await ctx.send("Set Leetcode account for " + str(ctx.author) + " to " + newAccount)
 
+
 @bot.event
 async def on_ready():
     print('We have logged in as {0.user}'.format(bot))
+
 
 @bot.event
 async def on_message(message):
@@ -127,6 +140,5 @@ async def on_message(message):
         return
     await bot.process_commands(message)
 
-scoreTotals = update()
 
-bot.run('BOT_TOKEN')
+bot.run(BOT_TOKEN)
