@@ -81,10 +81,8 @@ def get_all_scores_from_api():
         SCORES[user["discord_id"]] = calculate_score_from_response(response)
 
 
-# TODO: NOT YET IN USE
-@tasks.loop(seconds=600)  # task runs every 60 seconds
-async def my_background_task():
-    global SCORES
+@tasks.loop(seconds=3600)  # task runs every hour
+async def score_background_task():
     get_all_scores_from_api()
 
 
@@ -164,6 +162,7 @@ async def link(ctx, account_name):
 @bot.event
 async def on_ready():
     print("We have logged in as {0.user}".format(bot))
+    score_background_task.start()
 
 
 @bot.event
