@@ -23,6 +23,8 @@ if int(PRODUCTION) == 1:
 else:
     bot = commands.Bot(command_prefix="!")
 
+SCORES = {}
+
 
 def get_database():
     return CLIENT["users"]
@@ -65,11 +67,10 @@ def calculate_score_from_response(response):
     return score
 
 
-# Method to get scores.
+# Method to update the SCORES global variable
 def get_all_scores_from_api():
     # Key: discord id, Value: score
     print("Get scores has been called")
-    score_totals = {}
 
     database = get_database()
     users_collection = database["users"].find()
@@ -77,16 +78,14 @@ def get_all_scores_from_api():
 
     for user in users_list:
         response = call_leetcode_api(user["leetcode_username"])
-        score_totals[user["discord_id"]] = calculate_score_from_response(response)
-
-    return score_totals
+        SCORES[user["discord_id"]] = calculate_score_from_response(response)
 
 
 # TODO: NOT YET IN USE
 @tasks.loop(seconds=600)  # task runs every 60 seconds
 async def my_background_task():
     global SCORES
-    SCORES = get_all_scores_from_api()
+    get_all_scores_from_api()
 
 
 @bot.command()
@@ -174,5 +173,5 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
-SCORES = get_all_scores_from_api()
+get_all_scores_from_api()
 bot.run(BOT_TOKEN)
