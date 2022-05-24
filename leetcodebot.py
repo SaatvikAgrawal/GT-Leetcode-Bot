@@ -1,5 +1,6 @@
 import operator
 import os
+import time
 
 import discord
 import requests
@@ -87,7 +88,7 @@ async def score_background_task():
 
 
 @bot.command()
-async def update(ctx):
+async def score(ctx):
     if ctx.author.id not in SCORES:
         await ctx.send("You have not linked an account!")
     else:
@@ -95,46 +96,33 @@ async def update(ctx):
         await ctx.send(f"You have {SCORES[ctx.author.id]} points")
 
 
+def timestamp():
+    return str(round(time.time() * 1000))
+
+
 @bot.command()
 async def top(ctx):
-    lazy_update = True
+    print("updating user score from API " + timestamp())
+    update_user_score(ctx.author.id)
+    print("user score has been updated " + timestamp())
+    position_no = 1
+    leaderboard = ""
 
-    if lazy_update:
+    # Sort data by the total score values, from greatest to least
+    print("sorting the SCORES variable " + timestamp())
+    sorted_score_totals = sorted(SCORES.items(), reverse=True, key=operator.itemgetter(1))
+    print("done sorting the SCORES variable " + timestamp())
 
-        update_user_score(ctx.author.id)
+    for score_tuple in sorted_score_totals:
+        print(bot.get_user(int(score_tuple[0])).name)
+        print(f"{score_tuple}, about to append leaderboard string " + timestamp())
+        leaderboard += f"{str(position_no)}. {await bot.fetch_user(int(score_tuple[0]))}: {str(score_tuple[1])} \n"
+        print(f"{score_tuple}, done appending to leaderboard " + timestamp())
 
-        position_no = 1
-        leaderboard = ""
+        position_no += 1
 
-        # Sort data by the total score values, from greatest to least
-        sorted_score_totals = sorted(SCORES.items(), reverse=True, key=operator.itemgetter(1))
-
-        for score in sorted_score_totals:
-            leaderboard += f"{str(position_no)}. {str(await bot.fetch_user(score[0]))}: {str(score[1])} \n"
-            position_no += 1
-        await ctx.send(leaderboard)
-    else:
-        # Key: discord id, Value: score
-        score_totals = {}
-
-        database = get_database()
-        users_collection = database["users"].find()
-        users_list = list(users_collection)
-
-        for user in users_list:
-            response = call_leetcode_api(user["leetcode_username"])
-            score_totals[user["discord_id"]] = calculate_score_from_response(response)
-
-        position_no = 1
-        leaderboard = ""
-
-        # Sort data by the total score values, from greatest to least
-        sorted_score_totals = sorted(score_totals.items(), reverse=True, key=operator.itemgetter(1))
-
-        for score in sorted_score_totals:
-            leaderboard += f"{str(position_no)}. {str(await bot.fetch_user(score[0]))}: {str(score[1])} \n"
-            position_no += 1
-        await ctx.send(leaderboard)
+    print("done, awaiting send " + timestamp())
+    await ctx.send(leaderboard)
 
 
 @bot.command()
@@ -156,7 +144,7 @@ async def link(ctx, account_name):
         new_user = {"leetcode_username": account_name, "discord_id": ctx.author.id}
         database["users"].insert_one(new_user)
         await ctx.send(f"Set Leetcode account for {str(ctx.author)} to {account_name}")
-        await update(ctx)
+        await score(ctx)
 
 
 @bot.event
@@ -172,5 +160,4 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
-get_all_scores_from_api()
 bot.run(BOT_TOKEN)
