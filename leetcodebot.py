@@ -51,11 +51,18 @@ def call_leetcode_api(username):
     return dict(requests.get(api_url + query).json())
 
 
-def update_user_score(discord_id):
+# allows a synchronous call to the discord API
+def get_discriminator_sync(id):
+    url = f"https://discord.com/api/v9/users/{int(id)}"
+    response = dict(requests.get(url, headers={"Authorization": f"Bot {BOT_TOKEN}"}).json())
+    return str(f"{response['username']}#{response['discriminator']}")
+
+
+def update_user_score(discord_id, name):
     db_user = list(get_database()["users"].find({'discord_id': discord_id}))[0]
     response = call_leetcode_api(db_user["leetcode_username"])
     score = calculate_score_from_response(response)
-    SCORES[discord_id] = score
+    SCORES[discord_id] = [score, name]
 
 
 def calculate_score_from_response(response):
@@ -79,7 +86,8 @@ def get_all_scores_from_api():
 
     for user in users_list:
         response = call_leetcode_api(user["leetcode_username"])
-        SCORES[user["discord_id"]] = calculate_score_from_response(response)
+        SCORES[user["discord_id"]] = [calculate_score_from_response(response),
+                                      str(get_discriminator_sync(user["discord_id"]))]
 
 
 @tasks.loop(seconds=3600)  # task runs every hour
@@ -92,8 +100,8 @@ async def score(ctx):
     if ctx.author.id not in SCORES:
         await ctx.send("You have not linked an account!")
     else:
-        update_user_score(ctx.author.id)
-        await ctx.send(f"You have {SCORES[ctx.author.id]} points")
+        update_user_score(ctx.author.id, f"{ctx.author.name}#{ctx.author.discriminator}")
+        await ctx.send(f"You have {SCORES[ctx.author.id][0]} points")
 
 
 def timestamp():
@@ -103,20 +111,19 @@ def timestamp():
 @bot.command()
 async def top(ctx):
     print("updating user score from API " + timestamp())
-    update_user_score(ctx.author.id)
+    update_user_score(ctx.author.id, f"{ctx.author.name}#{ctx.author.discriminator}")
     print("user score has been updated " + timestamp())
     position_no = 1
     leaderboard = ""
 
     # Sort data by the total score values, from greatest to least
     print("sorting the SCORES variable " + timestamp())
-    sorted_score_totals = sorted(SCORES.items(), reverse=True, key=operator.itemgetter(1))
+    sorted_score_totals = sorted(SCORES.values(), reverse=True, key=lambda x: x[0])
     print("done sorting the SCORES variable " + timestamp())
 
     for score_tuple in sorted_score_totals:
-        print(bot.get_user(int(score_tuple[0])).name)
         print(f"{score_tuple}, about to append leaderboard string " + timestamp())
-        leaderboard += f"{str(position_no)}. {await bot.fetch_user(int(score_tuple[0]))}: {str(score_tuple[1])} \n"
+        leaderboard += f"{str(position_no)}. {str(score_tuple[1])}: {str(score_tuple[0])} \n"
         print(f"{score_tuple}, done appending to leaderboard " + timestamp())
 
         position_no += 1
